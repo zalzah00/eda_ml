@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np # Added for np.number and np.sqrt
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -38,7 +38,9 @@ else:
         default=safe_default_selections
     )
 
+    # **CRITICAL FIX 1: Save features using the key expected by 5_Summary.py**
     st.session_state['selected_features_model'] = selected_features
+    st.session_state['selected_features'] = selected_features # For 5_Summary.py consistency
     
     st.markdown("---")
 
@@ -99,6 +101,17 @@ else:
             remainder='passthrough'
         )
 
+        # **CRITICAL FIX 2: Set default preprocessing strategies for 5_Summary.py**
+        st.session_state['imputer_strategy'] = 'dropna_pre_split' # Indicate rows were dropped
+        st.session_state['scaler_method'] = 'StandardScaler'
+        st.session_state['handle_unknown'] = True
+        st.session_state['k_neighbors'] = 'N/A' # Default for non-KNN models
+        
+        # **CRITICAL FIX 3: Store core model configuration**
+        st.session_state['selected_model_name'] = model_name
+        st.session_state['is_classification'] = (problem_type == "Classification")
+        st.session_state['test_size'] = test_size
+
         # --- Training and Evaluation ---
         if st.button("Train and Evaluate Model"):
             with st.spinner(f"Training {model_name}..."):
@@ -117,10 +130,15 @@ else:
                     st.success(f"**Accuracy:** {accuracy:.4f}")
                     st.metric("Test Set Accuracy", f"{accuracy:.2%}")
                     
+                    # **CRITICAL FIX 4: Save Classification Results**
+                    st.session_state['accuracy'] = accuracy
+                    # Set other regression metrics to N/A
+                    st.session_state['rmse'] = 'N/A'
+                    st.session_state['r2'] = 'N/A'
+                    
                 else:
-                    # For Regression (FIXED THE ERROR HERE)
+                    # For Regression
                     mse = mean_squared_error(y_test, y_pred)
-                    # Use np.sqrt() to get RMSE
                     rmse = np.sqrt(mse) 
                     r2 = r2_score(y_test, y_pred)
                     
@@ -128,6 +146,12 @@ else:
                     st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.2f}")
                     st.metric("Coefficient of Determination ($R^2$)", f"{r2:.2f}")
                     
+                    # **CRITICAL FIX 5: Save Regression Results**
+                    st.session_state['rmse'] = rmse
+                    st.session_state['r2'] = r2
+                    # Set other classification metrics to N/A
+                    st.session_state['accuracy'] = 'N/A'
+
                     # Plotting predicted vs actual
                     fig, ax = plt.subplots(figsize=(8, 6))
                     ax.scatter(y_test, y_pred, alpha=0.6)
