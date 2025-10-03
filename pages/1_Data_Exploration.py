@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 
-if 'df' not in st.session_state:
+if 'df' not in st.session_state or st.session_state['df'] is None:
     st.warning("Please upload a data file on the Home page first.")
 else:
     st.header("2. Data Exploration and Selection")
