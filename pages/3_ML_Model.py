@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np 
+import numpy as np # Added for np.number and np.sqrt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -10,6 +10,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ML Model", layout="wide")
 
@@ -25,14 +26,9 @@ else:
     problem_type = "Regression" if target_is_numerical else "Classification"
     st.info(f"Detected Problem Type: **{problem_type}**")
 
-    # --- Feature Selection (Fixing the StreamlitAPIException) ---
+    # --- Feature Selection ---
     feature_cols = [col for col in df.columns if col != target_col]
-
-    # Get the default selection. Prioritize the selection from the 'Visualizations' page
     default_selections = st.session_state.get('selected_features_viz', feature_cols)
-
-    # CRITICAL FIX: Filter the default selections against the current feature_cols
-    # This prevents the StreamlitAPIException if old columns are in session state.
     safe_default_selections = [col for col in default_selections if col in feature_cols]
     
     st.subheader("Feature Selection for Model")
@@ -42,7 +38,6 @@ else:
         default=safe_default_selections
     )
 
-    # Save the final selection for persistence
     st.session_state['selected_features_model'] = selected_features
     
     st.markdown("---")
@@ -75,13 +70,10 @@ else:
             test_size = st.slider("Test Set Size", min_value=0.1, max_value=0.5, value=0.2, step=0.05)
             
         # --- Preprocessing Steps ---
-        
-        # Select features based on type
         numerical_features = df[selected_features].select_dtypes(include=np.number).columns.tolist()
         categorical_features = df[selected_features].select_dtypes(include=['object', 'category']).columns.tolist()
         
-        # Basic imputation (filling missing values)
-        df_model = df[selected_features + [target_col]].dropna() # Simple dropna for example
+        df_model = df[selected_features + [target_col]].dropna() # Simple dropna
         
         if len(df_model) < len(df):
              st.warning(f"Note: Dropping {len(df) - len(df_model)} rows with missing values for model training.")
@@ -89,10 +81,8 @@ else:
         X = df_model[selected_features]
         y = df_model[target_col]
 
-        # Splitting data
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
-        # Preprocessing pipelines
         numerical_transformer = Pipeline(steps=[
             ('scaler', StandardScaler())
         ])
@@ -101,23 +91,20 @@ else:
             ('onehot', OneHotEncoder(handle_unknown='ignore'))
         ])
 
-        # Create preprocessor
         preprocessor = ColumnTransformer(
             transformers=[
                 ('num', numerical_transformer, numerical_features),
                 ('cat', categorical_transformer, categorical_features)
             ],
-            remainder='passthrough' # Keep other columns (if any) as they are
+            remainder='passthrough'
         )
 
         # --- Training and Evaluation ---
         if st.button("Train and Evaluate Model"):
             with st.spinner(f"Training {model_name}..."):
-                # Create the full pipeline
                 full_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
                                                 ('model', model)])
                 
-                # Train the model
                 full_pipeline.fit(X_train, y_train)
                 y_pred = full_pipeline.predict(X_test)
 
@@ -130,11 +117,11 @@ else:
                     st.success(f"**Accuracy:** {accuracy:.4f}")
                     st.metric("Test Set Accuracy", f"{accuracy:.2%}")
                     
-                    # Optional: Display confusion matrix (requires more imports/code)
-                    
                 else:
-                    # For Regression
-                    rmse = mean_squared_error(y_test, y_pred, squared=False)
+                    # For Regression (FIXED THE ERROR HERE)
+                    mse = mean_squared_error(y_test, y_pred)
+                    # Use np.sqrt() to get RMSE
+                    rmse = np.sqrt(mse) 
                     r2 = r2_score(y_test, y_pred)
                     
                     st.success(f"**$R^2$ Score:** {r2:.4f}")
@@ -144,7 +131,9 @@ else:
                     # Plotting predicted vs actual
                     fig, ax = plt.subplots(figsize=(8, 6))
                     ax.scatter(y_test, y_pred, alpha=0.6)
-                    ax.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', lw=2)
+                    min_val = min(y_test.min(), y_pred.min())
+                    max_val = max(y_test.max(), y_pred.max())
+                    ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
                     ax.set_xlabel('Actual Values')
                     ax.set_ylabel('Predicted Values')
                     ax.set_title(f'{model_name}: Actual vs Predicted')
