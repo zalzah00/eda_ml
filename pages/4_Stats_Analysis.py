@@ -79,6 +79,7 @@ else:
                     
                     # Display the results
                     st.subheader("Model Summary")
+                    # Use st.code() or st.text() to display the summary string neatly
                     st.code(model.summary().as_text(), language='text')
                     
                     st.info("The summary table shows key metrics like R-squared / Pseudo-R-squared and the p-value for each predictor. A low **p-value (typically < 0.05)** indicates the predictor is statistically significant.")
