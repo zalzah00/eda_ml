@@ -1,4 +1,4 @@
-# pages/5_Statistical_Analysis.py
+# pages/4_Stats_Analysis.py
 
 import streamlit as st
 import pandas as pd
@@ -20,7 +20,7 @@ else:
     target_is_numerical = pd.api.types.is_numeric_dtype(df[target_col])
     
     # Check if target is binary (suitable for Logit)
-    # Ensure the unique values check handles NaN/None if they exist, though dropna below handles the data itself.
+    # We dropna() just for the unique count check, as the main data is cleaned later.
     if not target_is_numerical and len(df[target_col].dropna().unique()) <= 2:
         model_name = "Logistic Regression (Logit)"
         sm_model = sm.Logit
@@ -50,7 +50,6 @@ else:
                     # --- Prepare data for Statsmodels ---
                     
                     # 1. Drop rows with any missing values in the selected columns
-                    # We dropna here to get a clean dataset for the model
                     data_for_stats = df[[target_col] + selected_features].dropna()
                     
                     if data_for_stats.empty:
@@ -64,9 +63,8 @@ else:
                     # 2. Identify categorical features
                     categorical_features = X_stats.select_dtypes(include=['object', 'category']).columns.tolist()
 
-                    # 3. One-hot encode categorical variables
+                    # 3. One-hot encode categorical variables (FIXES PREVIOUS TYPE ERROR)
                     if categorical_features:
-                        # pd.get_dummies automatically creates new columns and drops originals
                         X_stats = pd.get_dummies(X_stats, columns=categorical_features, drop_first=True)
                         st.success(f"One-Hot Encoded categorical features: {', '.join(categorical_features)}")
 
@@ -81,10 +79,10 @@ else:
                     
                     # Display the results
                     st.subheader("Model Summary")
+                    # Use st.code() to display the summary string neatly
                     st.code(model.summary().as_text(), language='text')
                     
                     st.info("The summary table shows key metrics like R-squared / Pseudo-R-squared and the p-value for each predictor. A low **p-value (typically < 0.05)** indicates the predictor is statistically significant.")
 
                 except Exception as e:
-                    # Catch and display runtime errors from statsmodels (e.g., perfect multicollinearity)
-                    st.error(f"A runtime error occurred during model fitting: {e}. Please check for high correlation or highly imbalanced target classes.")
+                    st.error(f"A runtime error occurred during model fitting: {e}. Please check for high correlation (multicollinearity) or issues with the target class balance.")
