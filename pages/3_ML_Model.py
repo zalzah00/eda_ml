@@ -114,8 +114,8 @@ else:
                 
             if df_model.empty:
                 st.error("After dropping rows with missing data, no records remain. Cannot run analysis.")
-                # This return is safe, as it is inside the button's if block.
-                return
+                # Use st.stop() instead of return
+                st.stop()
 
             X = df_model[selected_features]
             y = df_model[target_col]
@@ -152,47 +152,55 @@ else:
 
             # 4. Train
             with st.spinner(f"Training {model_name}..."):
-                full_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
-                                                ('model', model)])
-                
-                full_pipeline.fit(X_train, y_train)
-                y_pred = full_pipeline.predict(X_test)
+                try:
+                    full_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
+                                                    ('model', model)])
+                    
+                    full_pipeline.fit(X_train, y_train)
+                    y_pred = full_pipeline.predict(X_test)
 
-                # --- Results ---
-                st.subheader("Model Evaluation Results")
-                
-                # 5. Evaluate and Save Results
-                if problem_type == "Classification":
-                    accuracy = accuracy_score(y_test, y_pred)
-                    st.success(f"**Accuracy:** {accuracy:.4f}")
-                    st.metric("Test Set Accuracy", f"{accuracy:.2%}")
+                    # --- Results ---
+                    st.subheader("Model Evaluation Results")
                     
-                    st.session_state['accuracy'] = accuracy
-                    st.session_state['rmse'] = 'N/A'
-                    st.session_state['r2'] = 'N/A'
-                    
-                else:
-                    mse = mean_squared_error(y_test, y_pred)
-                    rmse = np.sqrt(mse) 
-                    r2 = r2_score(y_test, y_pred)
-                    
-                    st.success(f"**$R^2$ Score:** {r2:.4f}")
-                    st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.2f}")
-                    st.metric("Coefficient of Determination ($R^2$)", f"{r2:.2f}")
-                    
-                    st.session_state['rmse'] = rmse
-                    st.session_state['r2'] = r2
-                    st.session_state['accuracy'] = 'N/A'
+                    # 5. Evaluate and Save Results
+                    if problem_type == "Classification":
+                        accuracy = accuracy_score(y_test, y_pred)
+                        st.success(f"**Accuracy:** {accuracy:.4f}")
+                        st.metric("Test Set Accuracy", f"{accuracy:.2%}")
+                        
+                        st.session_state['accuracy'] = accuracy
+                        st.session_state['rmse'] = 'N/A'
+                        st.session_state['r2'] = 'N/A'
+                        
+                    else:
+                        mse = mean_squared_error(y_test, y_pred)
+                        rmse = np.sqrt(mse) 
+                        r2 = r2_score(y_test, y_pred)
+                        
+                        st.success(f"**$R^2$ Score:** {r2:.4f}")
+                        st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.2f}")
+                        st.metric("Coefficient of Determination ($R^2$)", f"{r2:.2f}")
+                        
+                        st.session_state['rmse'] = rmse
+                        st.session_state['r2'] = r2
+                        st.session_state['accuracy'] = 'N/A'
 
-                    # Plotting predicted vs actual
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    ax.scatter(y_test, y_pred, alpha=0.6)
-                    min_val = min(y_test.min(), y_pred.min())
-                    max_val = max(y_test.max(), y_pred.max())
-                    ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
-                    ax.set_xlabel('Actual Values')
-                    ax.set_ylabel('Predicted Values')
-                    ax.set_title(f'{model_name}: Actual vs Predicted')
-                    st.pyplot(fig)
+                        # Plotting predicted vs actual
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        ax.scatter(y_test, y_pred, alpha=0.6)
+                        min_val = min(y_test.min(), y_pred.min())
+                        max_val = max(y_test.max(), y_pred.max())
+                        ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
+                        ax.set_xlabel('Actual Values')
+                        ax.set_ylabel('Predicted Values')
+                        ax.set_title(f'{model_name}: Actual vs Predicted')
+                        st.pyplot(fig)
 
-                st.balloons()
+                    st.balloons()
+                    
+                    # Save the trained pipeline to session state
+                    st.session_state['trained_pipeline'] = full_pipeline
+                    
+                except Exception as e:
+                    st.error(f"An error occurred during model training: {str(e)}")
+                    st.stop()
