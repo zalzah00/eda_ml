@@ -11,6 +11,7 @@ def generate_notebook_content(session_state):
     # Get the actual pipeline configuration from session state
     pipeline_config = session_state.get('pipeline_config', {})
     metrics = session_state.get('metrics', {})
+    file_name = session_state.get('file_name', 'your_data.csv')
     
     if not pipeline_config:
         return json.dumps({"cells": [{"cell_type": "markdown", "source": "# No pipeline configuration found"}]})
@@ -25,14 +26,15 @@ def generate_notebook_content(session_state):
     test_size = pipeline_config.get('test_size', 0.2)
     selected_features = pipeline_config.get('selected_features', [])
     target_column = pipeline_config.get('target_column', 'target')
+    random_state = pipeline_config.get('random_state', 42)
     
     # Convert features to string representations
     features_str = ', '.join(f"'{f}'" for f in selected_features)
     numerical_features_str = ', '.join(f"'{f}'" for f in numerical_features)
     categorical_features_str = ', '.join(f"'{f}'" for f in categorical_features)
     
-    # Model parameters string
-    model_params_str = ', '.join([f"{key}={repr(value)}" for key, value in model_params.items()])
+    # Model parameters string (filter out empty params)
+    model_params_str = ', '.join([f"{key}={repr(value)}" for key, value in model_params.items() if value is not None])
     
     # --- Construct the notebook cells based on ACTUAL configuration ---
     notebook_cells = [
@@ -63,12 +65,20 @@ from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, mean_absolute_error
 
-# --- IMPORTANT: Change this path to your file location ---
-file_path = 'your_data.csv' 
+# Configuration from Streamlit app
+file_name = '{file_name}'
+target_column = '{target_column}'
+selected_features = [{features_str}]
+test_size = {test_size}
+random_state = {random_state}
+
+# Load data
 try:
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_name)
+    print(f"Data loaded successfully from {{file_name}}")
+    print(f"Data shape: {{df.shape}}")
 except FileNotFoundError:
-    print(f"Error: The file at {{file_path}} was not found. Please update the path.")
+    print(f"Error: The file '{{file_name}}' was not found. Please update the file_name variable.")
     df = None
 """
         },
@@ -102,18 +112,19 @@ except FileNotFoundError:
             "metadata": {},
             "outputs": [],
             "source": f"""if df is not None:
-    # Target and features
-    target_col = '{target_column}'
-    selected_features = [{features_str}]
-
     # Prepare data (drop rows with missing values as done in the app)
-    data_for_model = df[[target_col] + selected_features].dropna()
+    data_for_model = df[[target_column] + selected_features].dropna()
     X = data_for_model[selected_features]
-    y = data_for_model[target_col]
+    y = data_for_model[target_column]
+    
+    print(f"Data after dropping missing values: {{X.shape[0]}} rows")
     
     # Feature types
     numerical_features = [{numerical_features_str}]
     categorical_features = [{categorical_features_str}]
+    
+    print(f"Numerical features: {{numerical_features}}")
+    print(f"Categorical features: {{categorical_features}}")
     
     # Preprocessing pipelines
     numerical_transformer = Pipeline(steps=[
@@ -131,33 +142,28 @@ except FileNotFoundError:
             ('cat', categorical_transformer, categorical_features)
         ])
     
-    # Model selection
-    if '{model_class}' == 'LogisticRegression':
-        from sklearn.linear_model import LogisticRegression
+    # Model selection based on actual model class
+    model_class = '{model_class}'
+    {model_params_str}
+    
+    if model_class == 'LogisticRegression':
         model = LogisticRegression({model_params_str})
-    elif '{model_class}' == 'LinearRegression':
-        from sklearn.linear_model import LinearRegression
+    elif model_class == 'LinearRegression':
         model = LinearRegression({model_params_str})
-    elif '{model_class}' == 'Ridge':
-        from sklearn.linear_model import Ridge
+    elif model_class == 'Ridge':
         model = Ridge({model_params_str})
-    elif '{model_class}' == 'Lasso':
-        from sklearn.linear_model import Lasso
+    elif model_class == 'Lasso':
         model = Lasso({model_params_str})
-    elif '{model_class}' == 'DecisionTreeClassifier':
-        from sklearn.tree import DecisionTreeClassifier
+    elif model_class == 'DecisionTreeClassifier':
         model = DecisionTreeClassifier({model_params_str})
-    elif '{model_class}' == 'DecisionTreeRegressor':
-        from sklearn.tree import DecisionTreeRegressor
+    elif model_class == 'DecisionTreeRegressor':
         model = DecisionTreeRegressor({model_params_str})
-    elif '{model_class}' == 'RandomForestClassifier':
-        from sklearn.ensemble import RandomForestClassifier
+    elif model_class == 'RandomForestClassifier':
         model = RandomForestClassifier({model_params_str})
-    elif '{model_class}' == 'RandomForestRegressor':
-        from sklearn.ensemble import RandomForestRegressor
+    elif model_class == 'RandomForestRegressor':
         model = RandomForestRegressor({model_params_str})
     else:
-        raise ValueError(f"Unknown model class: {{'{model_class}'}}")
+        raise ValueError(f"Unknown model class: {{model_class}}")
     
     # Create the full pipeline
     full_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', model)])
@@ -165,8 +171,7 @@ except FileNotFoundError:
     print("Pipeline built successfully!")
     print(f"Problem Type: {problem_type}")
     print(f"Model: {model_name}")
-    print(f"Numerical features: {{numerical_features}}")
-    print(f"Categorical features: {{categorical_features}}")
+    print(f"Model Class: {{model_class}}")
 """
         },
         {
@@ -181,7 +186,12 @@ except FileNotFoundError:
             "outputs": [],
             "source": f"""if df is not None:
     # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size={test_size}, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
+    
+    print(f"Training set: {{X_train.shape[0]}} rows")
+    print(f"Test set: {{X_test.shape[0]}} rows")
     
     # Train model
     full_pipeline.fit(X_train, y_train)
@@ -292,7 +302,8 @@ else:
         "Data Type": [str(dtype) for dtype in st.session_state['df'].dtypes]
     }).set_index('Column Name')
     
-    st.markdown(f"**Loaded File:** `{st.session_state.get('file_name', 'N/A')}`")
+    file_name = st.session_state.get('file_name', 'N/A')
+    st.markdown(f"**Loaded File:** `{file_name}`")
     st.markdown(f"**Number of Rows:** `{st.session_state['df'].shape[0]}`")
     st.markdown(f"**Number of Columns:** `{st.session_state['df'].shape[1]}`")
     st.dataframe(df_desc.T)
@@ -319,6 +330,7 @@ else:
         st.write(f"- Imputation: `{pipeline_config.get('imputation_strategy', 'dropna_pre_split')}`")
         st.markdown(f"**Features Used:** `{pipeline_config.get('selected_features', [])}`")
         st.markdown(f"**Train/Test Split:** `{100 - pipeline_config.get('test_size', 0.2) * 100:.0f}% train / {pipeline_config.get('test_size', 0.2) * 100:.0f}% test`")
+        st.markdown(f"**Random State:** `{pipeline_config.get('random_state', 42)}`")
         
         # --- Results Summary ---
         st.markdown("---")
