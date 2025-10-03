@@ -70,11 +70,11 @@ else:
                 "Random Forest Regressor (Baseline)": RandomForestRegressor
             }
 
+        alpha = None # Initialize alpha
         with col1:
             model_name = st.selectbox("Select Model", list(model_options.keys()))
             model_class = model_options[model_name]
             
-        alpha = None
         with col2:
             test_size = st.slider("Test Set Size", min_value=0.1, max_value=0.5, value=0.2, step=0.05)
             
@@ -92,16 +92,18 @@ else:
         if st.button("Train and Evaluate Model"):
             
             # 1. Instantiate the selected model with parameters
-            model_params = {'random_state': 42}
+            # Default params for tree-based and Logistic Regression
+            model_params = {'random_state': 42} 
             
-            if model_name in ["Logistic Regression"]:
+            if model_name == "Logistic Regression":
                 model_params.update({'max_iter': 1000})
             elif model_name in ["Ridge Regression (L2)", "Lasso Regression (L1)"]:
-                model_params = {'alpha': alpha, 'random_state': 42}
-            elif model_name in ["Linear Regression (Baseline)"]:
-                model_params = {} # Linear Regression takes no hyperparameters
-            # Note: Decision Tree and Random Forest will use default scikit-learn parameters plus random_state
+                # Use the alpha value from the slider
+                model_params = {'alpha': alpha, 'random_state': 42} 
+            elif model_name == "Linear Regression (Baseline)":
+                model_params = {} # No parameters needed
             
+            # Instantiate the model class with the determined parameters
             model = model_class(**model_params)
             
             # 2. Prepare data for Pipeline
@@ -112,6 +114,7 @@ else:
                 
             if df_model.empty:
                 st.error("After dropping rows with missing data, no records remain. Cannot run analysis.")
+                # This return is safe, as it is inside the button's if block.
                 return
 
             X = df_model[selected_features]
@@ -144,7 +147,7 @@ else:
             st.session_state['imputer_strategy'] = 'dropna_pre_split'
             st.session_state['scaler_method'] = 'StandardScaler'
             st.session_state['handle_unknown'] = True
-            st.session_state['k_neighbors'] = 'N/A' # Default for non-KNN models
+            st.session_state['k_neighbors'] = 'N/A' 
             st.session_state['alpha'] = alpha # Save alpha if it was used
 
             # 4. Train
