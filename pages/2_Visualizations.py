@@ -6,7 +6,7 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 
-if 'df' not in st.session_state or 'target_col' not in st.session_state:
+if 'df' not in st.session_state or 'target_col' not in st.session_state or st.session_state['df'] is None:
     st.warning("Please upload data and select a target column on previous pages.")
 else:
     st.header("3. Visualizations")
