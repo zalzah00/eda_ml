@@ -1,26 +1,40 @@
+# pages/5_Summary.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import json
 
 def generate_notebook_content(session_state):
-    """Generates the content for a Jupyter Notebook based on session state."""
+    """Generates the content for a Jupyter Notebook based on ACTUAL pipeline configuration."""
+    
+    # Get the actual pipeline configuration from session state
+    pipeline_config = session_state.get('pipeline_config', {})
+    metrics = session_state.get('metrics', {})
+    
+    if not pipeline_config:
+        return json.dumps({"cells": [{"cell_type": "markdown", "source": "# No pipeline configuration found"}]})
 
-    # Get data from session state
-    target_col = session_state.get('target_col', 'N/A')
-    selected_features = session_state.get('selected_features', [])
-    model_name = session_state.get('selected_model_name', 'N/A')
-    is_classification = session_state.get('is_classification', False)
-    imputer_strategy = session_state.get('imputer_strategy', 'median')
-    scaler_method = session_state.get('scaler_method', 'StandardScaler')
-    handle_unknown_str = "True" if session_state.get('handle_unknown', True) else "False"
-    test_size = session_state.get('test_size', 0.2)
-    k_neighbors = session_state.get('k_neighbors', 5)
-
-    # Convert features to a string representation that can be used in the notebook
+    # Extract configuration
+    problem_type = pipeline_config.get('problem_type', 'Unknown')
+    model_name = pipeline_config.get('model_name', 'Unknown Model')
+    model_class = pipeline_config.get('model_class', 'Unknown')
+    model_params = pipeline_config.get('model_params', {})
+    numerical_features = pipeline_config.get('numerical_features', [])
+    categorical_features = pipeline_config.get('categorical_features', [])
+    test_size = pipeline_config.get('test_size', 0.2)
+    selected_features = pipeline_config.get('selected_features', [])
+    target_column = pipeline_config.get('target_column', 'target')
+    
+    # Convert features to string representations
     features_str = ', '.join(f"'{f}'" for f in selected_features)
-
-    # --- Construct the notebook cells ---
+    numerical_features_str = ', '.join(f"'{f}'" for f in numerical_features)
+    categorical_features_str = ', '.join(f"'{f}'" for f in categorical_features)
+    
+    # Model parameters string
+    model_params_str = ', '.join([f"{key}={repr(value)}" for key, value in model_params.items()])
+    
+    # --- Construct the notebook cells based on ACTUAL configuration ---
     notebook_cells = [
         {
             "cell_type": "markdown",
@@ -37,26 +51,25 @@ def generate_notebook_content(session_state):
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": """import pandas as pd
+            "source": f"""import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, MinMaxScaler
-from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
-from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score, precision_score, recall_score, roc_curve, auc
+from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, mean_absolute_error
 
 # --- IMPORTANT: Change this path to your file location ---
 file_path = 'your_data.csv' 
 try:
     df = pd.read_csv(file_path)
 except FileNotFoundError:
-    print(f\"Error: The file at {file_path} was not found. Please update the path.\")
-    df = None # Set df to None to prevent errors
+    print(f"Error: The file at {{file_path}} was not found. Please update the path.")
+    df = None
 """
         },
         {
@@ -70,18 +83,18 @@ except FileNotFoundError:
             "metadata": {},
             "outputs": [],
             "source": """if df is not None:
-    print(\"Data Head:\")
+    print("Data Head:")
     print(df.head())
-    print(\"\\nData Info:\")
+    print("\\nData Info:")
     df.info()
-    print(\"\\nDescriptive Statistics:\")
+    print("\\nDescriptive Statistics:")
     print(df.describe(include='all'))
 """
         },
         {
             "cell_type": "markdown",
             "metadata": {},
-            "source": "## 3. Machine Learning Pipeline"
+            "source": f"## 3. Machine Learning Pipeline\n\n**Problem Type:** {problem_type}  \n**Model:** {model_name}  \n**Target:** {target_column}"
         },
         {
             "cell_type": "code",
@@ -89,27 +102,26 @@ except FileNotFoundError:
             "metadata": {},
             "outputs": [],
             "source": f"""if df is not None:
-    target_col = '{target_col}'
+    # Target and features
+    target_col = '{target_column}'
     selected_features = [{features_str}]
 
-    X = df[selected_features]
-    y = df[target_col]
+    # Prepare data (drop rows with missing values as done in the app)
+    data_for_model = df[[target_col] + selected_features].dropna()
+    X = data_for_model[selected_features]
+    y = data_for_model[target_col]
     
-    numerical_features = X.select_dtypes(include=np.number).columns.tolist()
-    categorical_features = X.select_dtypes(include=['object', 'category']).columns.tolist()
+    # Feature types
+    numerical_features = [{numerical_features_str}]
+    categorical_features = [{categorical_features_str}]
     
-    # Preprocessing pipelines based on app choices
-    numerical_transformer_steps = [('imputer', SimpleImputer(strategy='{imputer_strategy}'))]
-    if '{scaler_method}' == 'StandardScaler':
-        numerical_transformer_steps.append(('scaler', StandardScaler()))
-    elif '{scaler_method}' == 'MinMaxScaler':
-        numerical_transformer_steps.append(('scaler', MinMaxScaler()))
-    
-    numerical_transformer = Pipeline(steps=numerical_transformer_steps)
+    # Preprocessing pipelines
+    numerical_transformer = Pipeline(steps=[
+        ('scaler', StandardScaler())
+    ])
     
     categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='most_frequent')), 
-        ('onehot', OneHotEncoder(handle_unknown='ignore' if {handle_unknown_str} else 'error'))
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))
     ])
     
     # Bundle preprocessing
@@ -119,17 +131,42 @@ except FileNotFoundError:
             ('cat', categorical_transformer, categorical_features)
         ])
     
-    # Model selection based on app choice
-    if '{model_name}' == 'Logistic Regression':
-        model = LogisticRegression()
-    elif '{model_name}' == 'K-Nearest Neighbors Classifier':
-        model = KNeighborsClassifier(n_neighbors={k_neighbors})
-    # Add other models here
+    # Model selection
+    if '{model_class}' == 'LogisticRegression':
+        from sklearn.linear_model import LogisticRegression
+        model = LogisticRegression({model_params_str})
+    elif '{model_class}' == 'LinearRegression':
+        from sklearn.linear_model import LinearRegression
+        model = LinearRegression({model_params_str})
+    elif '{model_class}' == 'Ridge':
+        from sklearn.linear_model import Ridge
+        model = Ridge({model_params_str})
+    elif '{model_class}' == 'Lasso':
+        from sklearn.linear_model import Lasso
+        model = Lasso({model_params_str})
+    elif '{model_class}' == 'DecisionTreeClassifier':
+        from sklearn.tree import DecisionTreeClassifier
+        model = DecisionTreeClassifier({model_params_str})
+    elif '{model_class}' == 'DecisionTreeRegressor':
+        from sklearn.tree import DecisionTreeRegressor
+        model = DecisionTreeRegressor({model_params_str})
+    elif '{model_class}' == 'RandomForestClassifier':
+        from sklearn.ensemble import RandomForestClassifier
+        model = RandomForestClassifier({model_params_str})
+    elif '{model_class}' == 'RandomForestRegressor':
+        from sklearn.ensemble import RandomForestRegressor
+        model = RandomForestRegressor({model_params_str})
+    else:
+        raise ValueError(f"Unknown model class: {{'{model_class}'}}")
     
     # Create the full pipeline
     full_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', model)])
     
-    print(\"Pipeline built successfully!\")
+    print("Pipeline built successfully!")
+    print(f"Problem Type: {problem_type}")
+    print(f"Model: {model_name}")
+    print(f"Numerical features: {{numerical_features}}")
+    print(f"Categorical features: {{categorical_features}}")
 """
         },
         {
@@ -143,32 +180,73 @@ except FileNotFoundError:
             "metadata": {},
             "outputs": [],
             "source": f"""if df is not None:
+    # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size={test_size}, random_state=42)
     
+    # Train model
     full_pipeline.fit(X_train, y_train)
-    y_pred = full_pipeline.predict(X_test)
     
-    print(\"Model Training Complete!\")
+    # Make predictions
+    y_train_pred = full_pipeline.predict(X_train)
+    y_test_pred = full_pipeline.predict(X_test)
+    
+    print("Model Training Complete!")
 
     # Evaluation based on problem type
-    if {str(is_classification).lower()}:
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred)
-        recall = recall_score(y_test, y_pred)
-        f1 = f1_score(y_test, y_pred)
+    if '{problem_type.lower()}' == 'classification':
+        train_accuracy = accuracy_score(y_train, y_train_pred)
+        test_accuracy = accuracy_score(y_test, y_test_pred)
         
-        print(\"\\n--- Classification Results ---\")
-        print(f\"Accuracy: {{accuracy:.2f}}\")
-        print(f\"Precision: {{precision:.2f}}\")
-        print(f\"Recall: {{recall:.2f}}\")
-        print(f\"F1 Score: {{f1:.2f}}\")
+        print("\\n--- Classification Results ---")
+        print(f"Training Accuracy: {{train_accuracy:.4f}}")
+        print(f"Test Accuracy: {{test_accuracy:.4f}}")
+        
     else:
-        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-        r2 = r2_score(y_test, y_pred)
+        train_mae = mean_absolute_error(y_train, y_train_pred)
+        test_mae = mean_absolute_error(y_test, y_test_pred)
+        test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+        test_r2 = r2_score(y_test, y_test_pred)
         
-        print(\"\\n--- Regression Results ---\")
-        print(f\"RMSE: {{rmse:.2f}}\")
-        print(f\"R^2 Score: {{r2:.2f}}\")
+        print("\\n--- Regression Results ---")
+        print(f"Training MAE: {{train_mae:.4f}}")
+        print(f"Test MAE: {{test_mae:.4f}}")
+        print(f"Test RMSE: {{test_rmse:.4f}}")
+        print(f"Test R²: {{test_r2:.4f}}")
+        
+        # Plot actual vs predicted
+        plt.figure(figsize=(8, 6))
+        plt.scatter(y_test, y_test_pred, alpha=0.6)
+        min_val = min(y_test.min(), y_test_pred.min())
+        max_val = max(y_test.max(), y_test_pred.max())
+        plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
+        plt.xlabel('Actual Values')
+        plt.ylabel('Predicted Values')
+        plt.title('Actual vs Predicted Values')
+        plt.show()
+"""
+        },
+        {
+            "cell_type": "markdown", 
+            "metadata": {},
+            "source": "## 5. Expected Results\n\nBased on the Streamlit app analysis, you should see results similar to:"
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None, 
+            "metadata": {},
+            "outputs": [],
+            "source": f"""print("Expected Results from Streamlit App:")
+print("Problem Type: {problem_type}")
+print("Model: {model_name}")
+
+if '{problem_type.lower()}' == 'classification':
+    print(f"Training Accuracy: {metrics.get('train_accuracy', 'N/A')}")
+    print(f"Test Accuracy: {metrics.get('test_accuracy', 'N/A')}")
+else:
+    print(f"Training MAE: {metrics.get('train_mae', 'N/A')}")
+    print(f"Test MAE: {metrics.get('test_mae', 'N/A')}") 
+    print(f"Test RMSE: {metrics.get('test_rmse', 'N/A')}")
+    print(f"Test R²: {metrics.get('test_r2', 'N/A')}")
 """
         }
     ]
@@ -207,7 +285,7 @@ st.info("A review of all the options and results from your analysis.")
 if 'df' not in st.session_state:
     st.warning("Please upload a data file on the Home page to see the summary.")
 else:
-    # --- Existing summary code ... ---
+    # --- Data Overview ---
     st.subheader("Data & Analysis Overview")
     df_desc = pd.DataFrame({
         "Column Name": st.session_state['df'].columns,
@@ -218,35 +296,43 @@ else:
     st.markdown(f"**Number of Rows:** `{st.session_state['df'].shape[0]}`")
     st.markdown(f"**Number of Columns:** `{st.session_state['df'].shape[1]}`")
     st.dataframe(df_desc.T)
+    
     target_col = st.session_state.get('target_col', 'N/A')
     if target_col != 'N/A':
         st.markdown(f"**Selected Target Variable:** `{target_col}`")
         st.markdown(f"**Target Type:** `{st.session_state['df'][target_col].dtype}`")
+    
+    # --- Pipeline Configuration ---
     st.markdown("---")
     st.subheader("Machine Learning Pipeline")
-    if 'selected_model_name' in st.session_state:
-        st.markdown(f"**Selected Model:** `{st.session_state['selected_model_name']}`")
-        st.markdown("**Preprocessing Options:**")
-        st.write(f"- Imputation Strategy: `{st.session_state.get('imputer_strategy', 'N/A')}`")
-        st.write(f"- Scaling Method: `{st.session_state.get('scaler_method', 'N/A')}`")
-        st.write(f"- Ignore Unknown Categories: `{st.session_state.get('handle_unknown', 'N/A')}`")
-        st.markdown(f"**Features Used:** `{st.session_state.get('selected_features', 'N/A')}`")
-        st.markdown(f"**Train/Test Split:** `{100 - st.session_state.get('test_size', 0.2) * 100:.0f}% train / {st.session_state.get('test_size', 0.2) * 100:.0f}% test`")
-        if 'k_neighbors' in st.session_state:
-            st.markdown(f"**`k` Neighbors:** `{st.session_state['k_neighbors']}`")
+    
+    pipeline_config = st.session_state.get('pipeline_config', {})
+    if pipeline_config:
+        st.markdown(f"**Problem Type:** `{pipeline_config.get('problem_type', 'N/A')}`")
+        st.markdown(f"**Selected Model:** `{pipeline_config.get('model_name', 'N/A')}`")
+        st.markdown("**Preprocessing Configuration:**")
+        st.write(f"- Numerical Features: `{pipeline_config.get('numerical_features', [])}`")
+        st.write(f"- Categorical Features: `{pipeline_config.get('categorical_features', [])}`")
+        st.write(f"- Scaler: `{pipeline_config.get('numerical_transformer', {}).get('scaler_type', 'StandardScaler')}`")
+        st.write(f"- Encoder: `{pipeline_config.get('categorical_transformer', {}).get('encoder_type', 'OneHotEncoder')}`")
+        st.write(f"- Handle Unknown: `{pipeline_config.get('categorical_transformer', {}).get('handle_unknown', 'ignore')}`")
+        st.write(f"- Imputation: `{pipeline_config.get('imputation_strategy', 'dropna_pre_split')}`")
+        st.markdown(f"**Features Used:** `{pipeline_config.get('selected_features', [])}`")
+        st.markdown(f"**Train/Test Split:** `{100 - pipeline_config.get('test_size', 0.2) * 100:.0f}% train / {pipeline_config.get('test_size', 0.2) * 100:.0f}% test`")
+        
+        # --- Results Summary ---
         st.markdown("---")
         st.subheader("Results Summary")
-        if 'is_classification' in st.session_state:
-            if st.session_state['is_classification']:
-                st.markdown(f"**Accuracy:** `{st.session_state.get('accuracy', 'N/A'):.2f}`")
-                st.markdown(f"**Precision:** `{st.session_state.get('precision', 'N/A'):.2f}`")
-                st.markdown(f"**Recall:** `{st.session_state.get('recall', 'N/A'):.2f}`")
-                st.markdown(f"**F1 Score:** `{st.session_state.get('f1', 'N/A'):.2f}`")
-                if 'roc_auc' in st.session_state:
-                    st.markdown(f"**AUC:** `{st.session_state['roc_auc']:.2f}`")
-            else:
-                st.markdown(f"**RMSE:** `{st.session_state.get('rmse', 'N/A'):.2f}`")
-                st.markdown(f"**R² Score:** `{st.session_state.get('r2', 'N/A'):.2f}`")
+        
+        metrics = st.session_state.get('metrics', {})
+        if pipeline_config.get('problem_type') == 'Classification':
+            st.markdown(f"**Training Accuracy:** `{metrics.get('train_accuracy', 'N/A')}`")
+            st.markdown(f"**Test Accuracy:** `{metrics.get('test_accuracy', 'N/A')}`")
+        else:
+            st.markdown(f"**Training MAE:** `{metrics.get('train_mae', 'N/A')}`")
+            st.markdown(f"**Test MAE:** `{metrics.get('test_mae', 'N/A')}`")
+            st.markdown(f"**Test RMSE:** `{metrics.get('test_rmse', 'N/A')}`")
+            st.markdown(f"**Test R²:** `{metrics.get('test_r2', 'N/A')}`")
     else:
         st.info("No machine learning model has been trained yet. Please navigate to Page 4 to run an analysis.")
 
