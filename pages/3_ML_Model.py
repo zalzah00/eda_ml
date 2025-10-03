@@ -2,12 +2,14 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
+import numpy as np 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression, LinearRegression
+# --- UPDATED IMPORTS for new models ---
+from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
 import matplotlib.pyplot as plt
@@ -38,9 +40,9 @@ else:
         default=safe_default_selections
     )
 
-    # **CRITICAL FIX 1: Save features using the key expected by 5_Summary.py**
+    # Save features to session state
     st.session_state['selected_features_model'] = selected_features
-    st.session_state['selected_features'] = selected_features # For 5_Summary.py consistency
+    st.session_state['selected_features'] = selected_features 
     
     st.markdown("---")
 
@@ -52,68 +54,100 @@ else:
         
         col1, col2 = st.columns(2)
         
-        with col1:
-            if problem_type == "Classification":
-                model_options = {
-                    "Logistic Regression": LogisticRegression(random_state=42, max_iter=1000),
-                    "Random Forest Classifier": RandomForestClassifier(random_state=42)
-                }
-                model_name = st.selectbox("Select Model", list(model_options.keys()))
-                model = model_options[model_name]
-            else: # Regression
-                model_options = {
-                    "Linear Regression": LinearRegression(),
-                    "Random Forest Regressor": RandomForestRegressor(random_state=42)
-                }
-                model_name = st.selectbox("Select Model", list(model_options.keys()))
-                model = model_options[model_name]
+        # --- Define available models ---
+        if problem_type == "Classification":
+            model_options = {
+                "Logistic Regression": LogisticRegression,
+                "Decision Tree Classifier": DecisionTreeClassifier,
+                "Random Forest Classifier (Baseline)": RandomForestClassifier
+            }
+        else: # Regression
+            model_options = {
+                "Linear Regression (Baseline)": LinearRegression,
+                "Ridge Regression (L2)": Ridge,
+                "Lasso Regression (L1)": Lasso,
+                "Decision Tree Regressor": DecisionTreeRegressor,
+                "Random Forest Regressor (Baseline)": RandomForestRegressor
+            }
 
+        with col1:
+            model_name = st.selectbox("Select Model", list(model_options.keys()))
+            model_class = model_options[model_name]
+            
+        alpha = None
         with col2:
             test_size = st.slider("Test Set Size", min_value=0.1, max_value=0.5, value=0.2, step=0.05)
             
-        # --- Preprocessing Steps ---
-        numerical_features = df[selected_features].select_dtypes(include=np.number).columns.tolist()
-        categorical_features = df[selected_features].select_dtypes(include=['object', 'category']).columns.tolist()
+            # --- CONDITIONAL ALPHA SLIDER for Regularized Regression Models ---
+            if problem_type == "Regression" and model_name in ["Ridge Regression (L2)", "Lasso Regression (L1)"]:
+                st.markdown("---")
+                alpha = st.slider(
+                    "Regularization Strength (Alpha)", 
+                    min_value=0.01, max_value=10.0, value=1.0, step=0.1, 
+                    help="Higher Alpha means stronger regularization (coefficient shrinking/zeroing)."
+                )
+                st.info(f"Using Alpha = **{alpha}**")
         
-        df_model = df[selected_features + [target_col]].dropna() # Simple dropna
-        
-        if len(df_model) < len(df):
-             st.warning(f"Note: Dropping {len(df) - len(df_model)} rows with missing values for model training.")
-
-        X = df_model[selected_features]
-        y = df_model[target_col]
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
-
-        numerical_transformer = Pipeline(steps=[
-            ('scaler', StandardScaler())
-        ])
-
-        categorical_transformer = Pipeline(steps=[
-            ('onehot', OneHotEncoder(handle_unknown='ignore'))
-        ])
-
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ('num', numerical_transformer, numerical_features),
-                ('cat', categorical_transformer, categorical_features)
-            ],
-            remainder='passthrough'
-        )
-
-        # **CRITICAL FIX 2: Set default preprocessing strategies for 5_Summary.py**
-        st.session_state['imputer_strategy'] = 'dropna_pre_split' # Indicate rows were dropped
-        st.session_state['scaler_method'] = 'StandardScaler'
-        st.session_state['handle_unknown'] = True
-        st.session_state['k_neighbors'] = 'N/A' # Default for non-KNN models
-        
-        # **CRITICAL FIX 3: Store core model configuration**
-        st.session_state['selected_model_name'] = model_name
-        st.session_state['is_classification'] = (problem_type == "Classification")
-        st.session_state['test_size'] = test_size
-
         # --- Training and Evaluation ---
         if st.button("Train and Evaluate Model"):
+            
+            # 1. Instantiate the selected model with parameters
+            model_params = {'random_state': 42}
+            
+            if model_name in ["Logistic Regression"]:
+                model_params.update({'max_iter': 1000})
+            elif model_name in ["Ridge Regression (L2)", "Lasso Regression (L1)"]:
+                model_params = {'alpha': alpha, 'random_state': 42}
+            elif model_name in ["Linear Regression (Baseline)"]:
+                model_params = {} # Linear Regression takes no hyperparameters
+            # Note: Decision Tree and Random Forest will use default scikit-learn parameters plus random_state
+            
+            model = model_class(**model_params)
+            
+            # 2. Prepare data for Pipeline
+            df_model = df[selected_features + [target_col]].dropna() 
+
+            if len(df_model) < len(df):
+                st.warning(f"Note: Dropping {len(df) - len(df_model)} rows with missing values for model training.")
+                
+            if df_model.empty:
+                st.error("After dropping rows with missing data, no records remain. Cannot run analysis.")
+                return
+
+            X = df_model[selected_features]
+            y = df_model[target_col]
+
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+
+            numerical_features = X.select_dtypes(include=np.number).columns.tolist()
+            categorical_features = X.select_dtypes(include=['object', 'category']).columns.tolist()
+
+            numerical_transformer = Pipeline(steps=[
+                ('scaler', StandardScaler())
+            ])
+            categorical_transformer = Pipeline(steps=[
+                ('onehot', OneHotEncoder(handle_unknown='ignore'))
+            ])
+
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', numerical_transformer, numerical_features),
+                    ('cat', categorical_transformer, categorical_features)
+                ],
+                remainder='passthrough'
+            )
+
+            # 3. Store core configuration and default preprocessing settings
+            st.session_state['selected_model_name'] = model_name
+            st.session_state['is_classification'] = (problem_type == "Classification")
+            st.session_state['test_size'] = test_size
+            st.session_state['imputer_strategy'] = 'dropna_pre_split'
+            st.session_state['scaler_method'] = 'StandardScaler'
+            st.session_state['handle_unknown'] = True
+            st.session_state['k_neighbors'] = 'N/A' # Default for non-KNN models
+            st.session_state['alpha'] = alpha # Save alpha if it was used
+
+            # 4. Train
             with st.spinner(f"Training {model_name}..."):
                 full_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
                                                 ('model', model)])
@@ -123,21 +157,18 @@ else:
 
                 # --- Results ---
                 st.subheader("Model Evaluation Results")
-
+                
+                # 5. Evaluate and Save Results
                 if problem_type == "Classification":
-                    # For Classification
                     accuracy = accuracy_score(y_test, y_pred)
                     st.success(f"**Accuracy:** {accuracy:.4f}")
                     st.metric("Test Set Accuracy", f"{accuracy:.2%}")
                     
-                    # **CRITICAL FIX 4: Save Classification Results**
                     st.session_state['accuracy'] = accuracy
-                    # Set other regression metrics to N/A
                     st.session_state['rmse'] = 'N/A'
                     st.session_state['r2'] = 'N/A'
                     
                 else:
-                    # For Regression
                     mse = mean_squared_error(y_test, y_pred)
                     rmse = np.sqrt(mse) 
                     r2 = r2_score(y_test, y_pred)
@@ -146,10 +177,8 @@ else:
                     st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.2f}")
                     st.metric("Coefficient of Determination ($R^2$)", f"{r2:.2f}")
                     
-                    # **CRITICAL FIX 5: Save Regression Results**
                     st.session_state['rmse'] = rmse
                     st.session_state['r2'] = r2
-                    # Set other classification metrics to N/A
                     st.session_state['accuracy'] = 'N/A'
 
                     # Plotting predicted vs actual
