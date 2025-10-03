@@ -7,7 +7,7 @@ import numpy as np
 
 st.set_page_config(page_title="Statistical Analysis", layout="wide")
 
-if 'df' not in st.session_state or 'target_col' not in st.session_state:
+if 'df' not in st.session_state or 'target_col' not in st.session_state or st.session_state['df'] is None:
     st.warning("Please upload a data file and select a target column on the previous pages.")
 else:
     st.header("5. Statistical Analysis with Statsmodels")
