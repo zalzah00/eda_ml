@@ -70,6 +70,8 @@ else:
             }
 
         alpha = None
+        random_state = 42  # Define random_state here
+        
         with col1:
             model_name = st.selectbox("Select Model", list(model_options.keys()))
             model_class = model_options[model_name]
@@ -91,12 +93,12 @@ else:
         if st.button("Train and Evaluate Model"):
             
             # 1. Instantiate the selected model with parameters
-            model_params = {'random_state': 42} 
+            model_params = {'random_state': random_state} 
             
             if model_name == "Logistic Regression":
                 model_params.update({'max_iter': 1000})
             elif model_name in ["Ridge Regression", "Lasso Regression"]:
-                model_params = {'alpha': alpha, 'random_state': 42} 
+                model_params = {'alpha': alpha, 'random_state': random_state} 
             elif model_name == "Linear Regression":
                 model_params = {}
             
@@ -116,7 +118,7 @@ else:
             X = df_model[selected_features]
             y = df_model[target_col]
 
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
 
             numerical_features = X.select_dtypes(include=np.number).columns.tolist()
             categorical_features = X.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -169,7 +171,8 @@ else:
                         'imputation_strategy': 'dropna_pre_split',
                         'test_size': test_size,
                         'selected_features': selected_features,
-                        'target_column': target_col
+                        'target_column': target_col,
+                        'random_state': random_state  # Store random_state
                     }
                     
                     # --- Store Metrics ---
