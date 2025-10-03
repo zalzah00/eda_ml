@@ -11,7 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, mean_absolute_error
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ML Model", layout="wide")
@@ -114,7 +114,6 @@ else:
                 
             if df_model.empty:
                 st.error("After dropping rows with missing data, no records remain. Cannot run analysis.")
-                # Use st.stop() instead of return
                 st.stop()
 
             X = df_model[selected_features]
@@ -157,39 +156,73 @@ else:
                                                     ('model', model)])
                     
                     full_pipeline.fit(X_train, y_train)
-                    y_pred = full_pipeline.predict(X_test)
+                    
+                    # Make predictions for both training and test sets
+                    y_train_pred = full_pipeline.predict(X_train)
+                    y_test_pred = full_pipeline.predict(X_test)
 
                     # --- Results ---
                     st.subheader("Model Evaluation Results")
                     
                     # 5. Evaluate and Save Results
                     if problem_type == "Classification":
-                        accuracy = accuracy_score(y_test, y_pred)
-                        st.success(f"**Accuracy:** {accuracy:.4f}")
-                        st.metric("Test Set Accuracy", f"{accuracy:.2%}")
+                        train_accuracy = accuracy_score(y_train, y_train_pred)
+                        test_accuracy = accuracy_score(y_test, y_test_pred)
                         
-                        st.session_state['accuracy'] = accuracy
-                        st.session_state['rmse'] = 'N/A'
-                        st.session_state['r2'] = 'N/A'
+                        st.success(f"**Training Accuracy:** {train_accuracy:.4f}")
+                        st.success(f"**Test Accuracy:** {test_accuracy:.4f}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Training Accuracy", f"{train_accuracy:.2%}")
+                        with col2:
+                            st.metric("Test Accuracy", f"{test_accuracy:.2%}")
+                        
+                        st.session_state['train_accuracy'] = train_accuracy
+                        st.session_state['test_accuracy'] = test_accuracy
+                        st.session_state['train_mae'] = 'N/A'
+                        st.session_state['test_mae'] = 'N/A'
+                        st.session_state['test_rmse'] = 'N/A'
+                        st.session_state['test_r2'] = 'N/A'
                         
                     else:
-                        mse = mean_squared_error(y_test, y_pred)
-                        rmse = np.sqrt(mse) 
-                        r2 = r2_score(y_test, y_pred)
+                        # Calculate comprehensive regression metrics
+                        train_mae = mean_absolute_error(y_train, y_train_pred)
+                        test_mae = mean_absolute_error(y_test, y_test_pred)
+                        test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+                        test_r2 = r2_score(y_test, y_test_pred)
                         
-                        st.success(f"**$R^2$ Score:** {r2:.4f}")
-                        st.metric("Root Mean Squared Error (RMSE)", f"{rmse:.2f}")
-                        st.metric("Coefficient of Determination ($R^2$)", f"{r2:.2f}")
+                        # Display metrics in a comprehensive format
+                        st.success(f"**{model_name} Performance:**")
+                        st.write(f"**Training MAE:** {train_mae:.4f}")
+                        st.write(f"**Test MAE:** {test_mae:.4f}")
+                        st.write(f"**Test RMSE:** {test_rmse:.4f}")
+                        st.write(f"**Test R²:** {test_r2:.4f}")
                         
-                        st.session_state['rmse'] = rmse
-                        st.session_state['r2'] = r2
-                        st.session_state['accuracy'] = 'N/A'
+                        # Display metrics in columns for better visual layout
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Training MAE", f"{train_mae:.4f}")
+                        with col2:
+                            st.metric("Test MAE", f"{test_mae:.4f}")
+                        with col3:
+                            st.metric("Test RMSE", f"{test_rmse:.4f}")
+                        with col4:
+                            st.metric("Test R²", f"{test_r2:.4f}")
+                        
+                        # Store all metrics in session state
+                        st.session_state['train_mae'] = train_mae
+                        st.session_state['test_mae'] = test_mae
+                        st.session_state['test_rmse'] = test_rmse
+                        st.session_state['test_r2'] = test_r2
+                        st.session_state['train_accuracy'] = 'N/A'
+                        st.session_state['test_accuracy'] = 'N/A'
 
                         # Plotting predicted vs actual
                         fig, ax = plt.subplots(figsize=(8, 6))
-                        ax.scatter(y_test, y_pred, alpha=0.6)
-                        min_val = min(y_test.min(), y_pred.min())
-                        max_val = max(y_test.max(), y_pred.max())
+                        ax.scatter(y_test, y_test_pred, alpha=0.6)
+                        min_val = min(y_test.min(), y_test_pred.min())
+                        max_val = max(y_test.max(), y_test_pred.max())
                         ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
                         ax.set_xlabel('Actual Values')
                         ax.set_ylabel('Predicted Values')
