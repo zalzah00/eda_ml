@@ -1,27 +1,38 @@
-# app.py
-
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(layout="wide", page_title="Multi-Page ML App")
-st.title("Interactive Data Analysis and Prediction App 📈")
+st.set_page_config(page_title="Data Analysis App", layout="wide")
 
-st.header("1. Upload Your Data")
+# Initialize session state
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'file_name' not in st.session_state:
+    st.session_state.file_name = None
+if 'target_col' not in st.session_state:
+    st.session_state.target_col = None
 
-uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=['csv', 'xlsx'])
+st.title("Data Analysis App")
+st.write("Upload your dataset to get started with analysis and machine learning.")
 
-if uploaded_file:
-    if uploaded_file.name.endswith('.csv'):
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+
+if uploaded_file is not None:
+    try:
         df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
-    
-    # Store the DataFrame in session state
-    st.session_state['df'] = df
-
-    st.success("File uploaded successfully! You can now navigate to other pages.")
-    st.subheader("Data Preview")
-    st.dataframe(df.head())
-    
-    st.markdown("---")
-    st.markdown("### Navigate to the pages in the sidebar to continue.")
+        st.session_state.df = df
+        st.session_state.file_name = uploaded_file.name  # Store the actual filename
+        
+        st.success(f"File '{uploaded_file.name}' uploaded successfully!")
+        
+        # Display basic info
+        st.subheader("Data Preview")
+        st.write(f"Shape: {df.shape[0]} rows, {df.shape[1]} columns")
+        st.dataframe(df.head())
+        
+        st.subheader("Data Types")
+        st.write(df.dtypes)
+        
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+else:
+    st.info("Please upload a CSV file to proceed.")
