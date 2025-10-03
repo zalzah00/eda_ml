@@ -14,9 +14,23 @@ else:
     target_col = st.session_state['target_col']
 
     feature_cols = [col for col in df.columns if col != target_col]
+    
+    # Check if a selection was previously made on this page or the next
+    # Fallback to the first 5 features if no previous selection exists
+    default_features = st.session_state.get('selected_features_viz', feature_cols[:5])
+    
+    # Filter the default list to ensure all columns exist in the current DataFrame
+    # This prevents the StreamlitAPIException if the DataFrame changed.
+    safe_default_features = [col for col in default_features if col in feature_cols]
+
     selected_features = st.multiselect("Select features to visualize", 
                                        options=feature_cols, 
-                                       default=feature_cols[:5])
+                                       default=safe_default_features)
+    
+    # ⭐ ADD THIS LINE: Save the current selection to session state
+    # Use a new key to avoid conflicts: 'selected_features_viz' for this page,
+    # and 'selected_features_model' (or just 'selected_features') for the next page
+    st.session_state['selected_features_viz'] = selected_features
     
     # Check if target is numerical for correlation analysis
     target_is_numerical = pd.api.types.is_numeric_dtype(df[target_col])
@@ -45,15 +59,15 @@ else:
                     # For categorical targets, use hue coloring
                     if not target_is_numerical and len(numerical_features) >= 2:
                         fig = sns.pairplot(plot_data, 
-                                          vars=numerical_features, 
-                                          hue=target_col,
-                                          diag_kind='hist',
-                                          palette='viridis')
+                                           vars=numerical_features, 
+                                           hue=target_col,
+                                           diag_kind='hist',
+                                           palette='viridis')
                         plt.suptitle(f"Pair Plot with Target '{target_col}' as Hue", y=1.02)
                     else:
                         fig = sns.pairplot(plot_data, 
-                                          vars=numerical_features,
-                                          diag_kind='hist')
+                                           vars=numerical_features,
+                                           diag_kind='hist')
                         plt.suptitle("Pair Plot of Numerical Features", y=1.02)
                     
                     st.pyplot(fig)
@@ -149,7 +163,7 @@ else:
                     # Feature distributions
                     if selected_features:
                         feature_to_plot = st.selectbox("Select feature to view distribution:", 
-                                                     options=selected_features)
+                                                       options=selected_features)
                         
                         fig, ax = plt.subplots(figsize=(8, 4))
                         
@@ -159,21 +173,22 @@ else:
                             ax.set_ylabel('Frequency')
                             ax.set_title(f'Distribution of {feature_to_plot}')
                         else:
+                            # Use .head(10) to prevent bar charts with too many categories
                             df[feature_to_plot].value_counts().head(10).plot(kind='bar', ax=ax, alpha=0.7)
                             ax.set_xlabel(feature_to_plot)
                             ax.set_ylabel('Count')
-                            ax.set_title(f'Distribution of {feature_to_plot}')
+                            ax.set_title(f'Distribution of {feature_to_plot} (Top 10)')
                             plt.xticks(rotation=45)
                         
                         st.pyplot(fig)
             
             # Additional visualization: Feature vs Target scatter plots for numerical targets
             if target_is_numerical:
-                st.subheader("Feature vs Target Relationships")
+                st.subheader("Feature vs Target Relationships (Numerical Only)")
                 
                 # Select numerical features only for scatter plots
                 numerical_features_for_scatter = [f for f in selected_features 
-                                                if pd.api.types.is_numeric_dtype(df[f])]
+                                                  if pd.api.types.is_numeric_dtype(df[f])]
                 
                 if numerical_features_for_scatter:
                     # Create a grid of scatter plots
@@ -194,9 +209,9 @@ else:
                             # Add correlation coefficient
                             corr = df[feature].corr(df[target_col])
                             axes[idx].annotate(f'r = {corr:.2f}', 
-                                             xy=(0.05, 0.95), 
-                                             xycoords='axes fraction',
-                                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+                                               xy=(0.05, 0.95), 
+                                               xycoords='axes fraction',
+                                               bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
                     
                     # Hide empty subplots
                     for idx in range(len(numerical_features_for_scatter), len(axes)):
