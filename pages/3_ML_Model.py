@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ML Model", layout="wide")
 
-if 'df' not in st.session_state or 'target_col' not in st.session_state:
+if 'df' not in st.session_state or 'target_col' not in st.session_state st.session_state['df'] is None:
     st.warning("Please upload data and select a target column on previous pages.")
 else:
     st.header("4. Machine Learning Model")
