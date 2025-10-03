@@ -6,15 +6,11 @@ import numpy as np
 import time
 import random
 
-# Hide this page from sidebar navigation
-st.set_page_config(
-    page_title="F1 Prediction", 
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# Remove the page from sidebar (this must be the first Streamlit command)
-st.markdown("<style>#MainMenu {visibility: hidden;}</style>", unsafe_allow_html=True)
+# Check for secret parameter or direct access
+query_params = st.experimental_get_query_params()
+if 'secret' not in query_params and '6_Bonus' not in str(st.experimental_get_query_params()):
+    st.error("🚫 Page not found")
+    st.stop()
 
 st.set_page_config(page_title="F1 Prediction", layout="wide")
 
