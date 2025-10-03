@@ -6,13 +6,21 @@ import numpy as np
 import time
 import random
 
+# Hide this page from sidebar navigation
+st.set_page_config(
+    page_title="F1 Prediction", 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
 # Check for secret parameter or direct access
-query_params = st.experimental_get_query_params()
-if 'secret' not in query_params and '6_Bonus' not in str(st.experimental_get_query_params()):
+query_params = st.query_params
+if 'secret' not in query_params and '6_Bonus' not in str(query_params):
     st.error("🚫 Page not found")
     st.stop()
 
-st.set_page_config(page_title="F1 Prediction", layout="wide")
+# Remove the page from sidebar
+st.markdown("<style>#MainMenu {visibility: hidden;}</style>", unsafe_allow_html=True)
 
 st.title("🏎️ F1 Singapore Grand Prix 2025 Winner Predictor")
 st.markdown("### *Advanced Machine Learning Simulation*")
@@ -218,3 +226,9 @@ with st.expander("🔧 Developer Notes (shhh...)"):
     
     # Advanced ML complete! 🎉
     """)
+
+# Add a way to clear the URL parameters
+st.markdown("---")
+if st.button("🔒 Lock Page Again"):
+    st.query_params.clear()
+    st.rerun()
