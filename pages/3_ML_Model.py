@@ -7,7 +7,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-# --- UPDATED IMPORTS for new models ---
 from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -59,18 +58,18 @@ else:
             model_options = {
                 "Logistic Regression": LogisticRegression,
                 "Decision Tree Classifier": DecisionTreeClassifier,
-                "Random Forest Classifier (Baseline)": RandomForestClassifier
+                "Random Forest Classifier": RandomForestClassifier
             }
         else: # Regression
             model_options = {
-                "Linear Regression (Baseline)": LinearRegression,
-                "Ridge Regression (L2)": Ridge,
-                "Lasso Regression (L1)": Lasso,
+                "Linear Regression": LinearRegression,
+                "Ridge Regression": Ridge,
+                "Lasso Regression": Lasso,
                 "Decision Tree Regressor": DecisionTreeRegressor,
-                "Random Forest Regressor (Baseline)": RandomForestRegressor
+                "Random Forest Regressor": RandomForestRegressor
             }
 
-        alpha = None # Initialize alpha
+        alpha = None
         with col1:
             model_name = st.selectbox("Select Model", list(model_options.keys()))
             model_class = model_options[model_name]
@@ -79,7 +78,7 @@ else:
             test_size = st.slider("Test Set Size", min_value=0.1, max_value=0.5, value=0.2, step=0.05)
             
             # --- CONDITIONAL ALPHA SLIDER for Regularized Regression Models ---
-            if problem_type == "Regression" and model_name in ["Ridge Regression (L2)", "Lasso Regression (L1)"]:
+            if problem_type == "Regression" and model_name in ["Ridge Regression", "Lasso Regression"]:
                 st.markdown("---")
                 alpha = st.slider(
                     "Regularization Strength (Alpha)", 
@@ -92,16 +91,14 @@ else:
         if st.button("Train and Evaluate Model"):
             
             # 1. Instantiate the selected model with parameters
-            # Default params for tree-based and Logistic Regression
             model_params = {'random_state': 42} 
             
             if model_name == "Logistic Regression":
                 model_params.update({'max_iter': 1000})
-            elif model_name in ["Ridge Regression (L2)", "Lasso Regression (L1)"]:
-                # Use the alpha value from the slider
+            elif model_name in ["Ridge Regression", "Lasso Regression"]:
                 model_params = {'alpha': alpha, 'random_state': 42} 
-            elif model_name == "Linear Regression (Baseline)":
-                model_params = {} # No parameters needed
+            elif model_name == "Linear Regression":
+                model_params = {}
             
             # Instantiate the model class with the determined parameters
             model = model_class(**model_params)
@@ -139,16 +136,6 @@ else:
                 remainder='passthrough'
             )
 
-            # 3. Store core configuration and default preprocessing settings
-            st.session_state['selected_model_name'] = model_name
-            st.session_state['is_classification'] = (problem_type == "Classification")
-            st.session_state['test_size'] = test_size
-            st.session_state['imputer_strategy'] = 'dropna_pre_split'
-            st.session_state['scaler_method'] = 'StandardScaler'
-            st.session_state['handle_unknown'] = True
-            st.session_state['k_neighbors'] = 'N/A' 
-            st.session_state['alpha'] = alpha # Save alpha if it was used
-
             # 4. Train
             with st.spinner(f"Training {model_name}..."):
                 try:
@@ -161,14 +148,63 @@ else:
                     y_train_pred = full_pipeline.predict(X_train)
                     y_test_pred = full_pipeline.predict(X_test)
 
-                    # --- Results ---
-                    st.subheader("Model Evaluation Results")
+                    # --- Store COMPLETE Pipeline Configuration for Summary Page ---
+                    st.session_state['pipeline_config'] = {
+                        'problem_type': problem_type,
+                        'model_name': model_name,
+                        'model_class': model_class.__name__,
+                        'model_params': model_params,
+                        'preprocessor_type': 'ColumnTransformer',
+                        'numerical_features': numerical_features,
+                        'categorical_features': categorical_features,
+                        'numerical_transformer': {
+                            'steps': ['scaler'],
+                            'scaler_type': 'StandardScaler'
+                        },
+                        'categorical_transformer': {
+                            'steps': ['onehot'],
+                            'encoder_type': 'OneHotEncoder',
+                            'handle_unknown': 'ignore'
+                        },
+                        'imputation_strategy': 'dropna_pre_split',
+                        'test_size': test_size,
+                        'selected_features': selected_features,
+                        'target_column': target_col
+                    }
                     
-                    # 5. Evaluate and Save Results
+                    # --- Store Metrics ---
                     if problem_type == "Classification":
                         train_accuracy = accuracy_score(y_train, y_train_pred)
                         test_accuracy = accuracy_score(y_test, y_test_pred)
                         
+                        st.session_state['metrics'] = {
+                            'train_accuracy': train_accuracy,
+                            'test_accuracy': test_accuracy,
+                            'train_mae': 'N/A',
+                            'test_mae': 'N/A', 
+                            'test_rmse': 'N/A',
+                            'test_r2': 'N/A'
+                        }
+                        
+                    else:
+                        train_mae = mean_absolute_error(y_train, y_train_pred)
+                        test_mae = mean_absolute_error(y_test, y_test_pred)
+                        test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+                        test_r2 = r2_score(y_test, y_test_pred)
+                        
+                        st.session_state['metrics'] = {
+                            'train_mae': train_mae,
+                            'test_mae': test_mae,
+                            'test_rmse': test_rmse,
+                            'test_r2': test_r2,
+                            'train_accuracy': 'N/A',
+                            'test_accuracy': 'N/A'
+                        }
+
+                    # --- Results Display ---
+                    st.subheader("Model Evaluation Results")
+                    
+                    if problem_type == "Classification":
                         st.success(f"**Training Accuracy:** {train_accuracy:.4f}")
                         st.success(f"**Test Accuracy:** {test_accuracy:.4f}")
                         
@@ -178,28 +214,13 @@ else:
                         with col2:
                             st.metric("Test Accuracy", f"{test_accuracy:.2%}")
                         
-                        st.session_state['train_accuracy'] = train_accuracy
-                        st.session_state['test_accuracy'] = test_accuracy
-                        st.session_state['train_mae'] = 'N/A'
-                        st.session_state['test_mae'] = 'N/A'
-                        st.session_state['test_rmse'] = 'N/A'
-                        st.session_state['test_r2'] = 'N/A'
-                        
                     else:
-                        # Calculate comprehensive regression metrics
-                        train_mae = mean_absolute_error(y_train, y_train_pred)
-                        test_mae = mean_absolute_error(y_test, y_test_pred)
-                        test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
-                        test_r2 = r2_score(y_test, y_test_pred)
-                        
-                        # Display metrics in a comprehensive format
                         st.success(f"**{model_name} Performance:**")
                         st.write(f"**Training MAE:** {train_mae:.4f}")
                         st.write(f"**Test MAE:** {test_mae:.4f}")
                         st.write(f"**Test RMSE:** {test_rmse:.4f}")
                         st.write(f"**Test R²:** {test_r2:.4f}")
                         
-                        # Display metrics in columns for better visual layout
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
                             st.metric("Training MAE", f"{train_mae:.4f}")
@@ -209,14 +230,6 @@ else:
                             st.metric("Test RMSE", f"{test_rmse:.4f}")
                         with col4:
                             st.metric("Test R²", f"{test_r2:.4f}")
-                        
-                        # Store all metrics in session state
-                        st.session_state['train_mae'] = train_mae
-                        st.session_state['test_mae'] = test_mae
-                        st.session_state['test_rmse'] = test_rmse
-                        st.session_state['test_r2'] = test_r2
-                        st.session_state['train_accuracy'] = 'N/A'
-                        st.session_state['test_accuracy'] = 'N/A'
 
                         # Plotting predicted vs actual
                         fig, ax = plt.subplots(figsize=(8, 6))
