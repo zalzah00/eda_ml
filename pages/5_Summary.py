@@ -292,7 +292,7 @@ else:
 st.header("6. Analysis Summary")
 st.info("A review of all the options and results from your analysis.")
 
-if 'df' not in st.session_state:
+if 'df' not in st.session_state or st.session_state['df'] is None:
     st.warning("Please upload a data file on the Home page to see the summary.")
 else:
     # --- Data Overview ---
