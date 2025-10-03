@@ -1,7 +1,12 @@
+# pages/5_Statistical_Analysis.py
+
 import streamlit as st
 import pandas as pd
 import statsmodels.api as sm
-from sklearn.preprocessing import OneHotEncoder
+# ⭐ Added numpy for robust type checking
+import numpy as np 
+# Removed OneHotEncoder since pd.get_dummies is used
+# from sklearn.preprocessing import OneHotEncoder 
 
 if 'df' not in st.session_state or 'target_col' not in st.session_state:
     st.warning("Please upload a data file and select a target column on the previous pages.")
@@ -9,51 +14,75 @@ else:
     st.header("5. Statistical Analysis with Statsmodels")
     st.info("This section uses a statistical model to analyze the significance and impact of each predictor.")
 
-    df = st.session_state['df']
+    df = st.session_state['df'].copy() # Use a copy to prevent modifying session state data
     target_col = st.session_state['target_col']
 
+    # --- Model Type Selection based on Target Column ---
+    target_is_numerical = pd.api.types.is_numeric_dtype(df[target_col])
+    
+    # Check if target is binary (suitable for Logit)
+    if not target_is_numerical and len(df[target_col].unique()) <= 2:
+        model_name = "Logistic Regression (Logit)"
+        sm_model = sm.Logit
+    elif target_is_numerical:
+        model_name = "Ordinary Least Squares (OLS) - Regression"
+        sm_model = sm.OLS
+    else:
+        st.error(f"Target column '{target_col}' is categorical with more than 2 unique values. Only OLS (numerical) or Logit (binary) models are supported here.")
+        sm_model = None # Disable analysis if not supported
+        
+    if sm_model:
+        st.subheader(f"Model Selected: {model_name}")
+
+    # --- Predictor Selection ---
     feature_cols = [col for col in df.columns if col != target_col]
     selected_features = st.multiselect(
         "Select predictor variables for the statistical model:",
         options=feature_cols,
-        default=feature_cols
+        # Use previous selections from ML model page as a safe default
+        default=st.session_state.get('selected_features_model', feature_cols)
     )
 
-    if st.button("Run Statistical Analysis"):
+    if st.button("Run Statistical Analysis") and sm_model:
         if not selected_features:
             st.error("Please select at least one predictor variable.")
         else:
             try:
                 # --- Prepare data for Statsmodels ---
-                # Drop rows with any missing values in the selected columns
+                
+                # 1. Drop rows with any missing values in the selected columns
                 data_for_stats = df[[target_col] + selected_features].dropna()
                 
+                if data_for_stats.empty:
+                    st.error("After dropping rows with missing data, no records remain. Cannot run analysis.")
+                    return
+
                 # Separate features (X) and target (y)
                 X_stats = data_for_stats[selected_features]
                 y_stats = data_for_stats[target_col]
                 
-                # Identify numerical and categorical features
-                numerical_features = X_stats.select_dtypes(include=['int64', 'float64']).columns.tolist()
+                # 2. Identify categorical features (including 'object' and 'category')
                 categorical_features = X_stats.select_dtypes(include=['object', 'category']).columns.tolist()
 
-                # One-hot encode categorical variables
+                # 3. One-hot encode categorical variables (FIXES THE ORIGINAL TYPE ERROR)
                 if categorical_features:
                     X_stats = pd.get_dummies(X_stats, columns=categorical_features, drop_first=True)
+                    st.success(f"One-Hot Encoded categorical features: {', '.join(categorical_features)}")
 
-                # Add a constant (intercept) for the OLS model
-                X_stats = sm.add_constant(X_stats)
+                # 4. Add a constant (intercept)
+                X_stats = sm.add_constant(X_stats, prepend=False)
 
-                # --- Run the OLS (Ordinary Least Squares) Model ---
+                # --- Run the Statistical Model ---
                 with st.spinner('Running statistical analysis...'):
-                    model = sm.OLS(y_stats, X_stats).fit()
+                    model = sm_model(y_stats, X_stats).fit()
 
                 st.success("Analysis complete!")
                 
                 # Display the results
-                st.subheader("Statistical Summary")
-                st.write(model.summary())
+                st.subheader("Model Summary")
+                st.text(model.summary())
                 
-                st.info("The summary table shows key metrics like R-squared and the p-value for each predictor. A low p-value (typically < 0.05) indicates that the predictor is statistically significant.")
+                st.info("The summary table shows key metrics like R-squared / Pseudo-R-squared and the p-value for each predictor. A low **p-value (typically < 0.05)** indicates the predictor is statistically significant.")
 
             except Exception as e:
-                st.error(f"An error occurred: {e}. Please check your data and selections.")
+                st.error(f"An error occurred: {e}. Please check your data and selections. Ensure your target variable is binary (0/1) for Logit.")
